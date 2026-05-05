@@ -106,18 +106,29 @@ func getChannelQuery(group string, model string, retry int) (*gorm.DB, error) {
 func GetChannel(group string, model string, retry int) (*Channel, error) {
 	var abilities []Ability
 
-	var err error = nil
-	channelQuery, err := getChannelQuery(group, model, retry)
-	if err != nil {
-		return nil, err
+	var firstErr error
+	for _, candidate := range channelLookupModelCandidates(model) {
+		channelQuery, err := getChannelQuery(group, candidate, retry)
+		if err != nil {
+			if firstErr == nil {
+				firstErr = err
+			}
+			continue
+		}
+		if common.UsingSQLite || common.UsingPostgreSQL {
+			err = channelQuery.Order("weight DESC").Find(&abilities).Error
+		} else {
+			err = channelQuery.Order("weight DESC").Find(&abilities).Error
+		}
+		if err != nil {
+			return nil, err
+		}
+		if len(abilities) > 0 {
+			break
+		}
 	}
-	if common.UsingSQLite || common.UsingPostgreSQL {
-		err = channelQuery.Order("weight DESC").Find(&abilities).Error
-	} else {
-		err = channelQuery.Order("weight DESC").Find(&abilities).Error
-	}
-	if err != nil {
-		return nil, err
+	if len(abilities) == 0 && firstErr != nil {
+		return nil, firstErr
 	}
 	channel := Channel{}
 	if len(abilities) > 0 {
@@ -139,7 +150,7 @@ func GetChannel(group string, model string, retry int) (*Channel, error) {
 	} else {
 		return nil, nil
 	}
-	err = DB.First(&channel, "id = ?", channel.Id).Error
+	err := DB.First(&channel, "id = ?", channel.Id).Error
 	return &channel, err
 }
 
