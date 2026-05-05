@@ -60,3 +60,10 @@ func TestModelPriceHelperTieredUsesPreloadedRequestInput(t *testing.T) {
 	require.Equal(t, billing_setting.BillingModeTieredExpr, info.TieredBillingSnapshot.BillingMode)
 	require.Equal(t, common.QuotaPerUnit, info.TieredBillingSnapshot.QuotaPerUnit)
 }
+
+func TestHasModelBillingConfigAllowsConfiguredEndpointOnlyImageModel(t *testing.T) {
+	defer common.SetEndpointOnlyImageModelsForTest("future-image-model")()
+
+	require.True(t, HasModelBillingConfig("future-image-model"))
+	require.False(t, HasModelBillingConfig("future-unpriced-text-model"))
+}

@@ -240,3 +240,62 @@ func TestListModelsTokenLimitIncludesTieredBillingModel(t *testing.T) {
 	require.NotContains(t, ids, "zz-token-tiered-missing-expr-model")
 	require.NotContains(t, ids, "zz-token-unpriced-model")
 }
+
+func TestListModelsHidesEndpointOnlyImageModel(t *testing.T) {
+	defer common.SetEndpointOnlyImageModelsForTest("zz-image-runtime-model")()
+	withSelfUseModeDisabled(t)
+	withTieredBillingConfig(t, map[string]string{
+		"zz-visible-non-runtime-model": "tiered_expr",
+	}, map[string]string{
+		"zz-visible-non-runtime-model": `tier("base", p)`,
+	})
+
+	db := setupModelListControllerTestDB(t)
+	require.NoError(t, db.Create(&model.User{
+		Id:       1002,
+		Username: "endpoint-only-model-list-user",
+		Password: "password",
+		Group:    "default",
+		Status:   common.UserStatusEnabled,
+	}).Error)
+	require.NoError(t, db.Create(&[]model.Ability{
+		{Group: "default", Model: "zz-image-runtime-model", ChannelId: 1, Enabled: true},
+		{Group: "default", Model: "zz-visible-non-runtime-model", ChannelId: 1, Enabled: true},
+	}).Error)
+
+	recorder := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(recorder)
+	ctx.Request = httptest.NewRequest(http.MethodGet, "/v1/models", nil)
+	ctx.Set("id", 1002)
+
+	ListModels(ctx, constant.ChannelTypeOpenAI)
+
+	ids := decodeListModelsResponse(t, recorder)
+	require.NotContains(t, ids, "zz-image-runtime-model")
+	require.Contains(t, ids, "zz-visible-non-runtime-model")
+}
+
+func TestListModelsTokenLimitHidesEndpointOnlyImageModel(t *testing.T) {
+	defer common.SetEndpointOnlyImageModelsForTest("zz-token-image-runtime-model")()
+	withSelfUseModeDisabled(t)
+	withTieredBillingConfig(t, map[string]string{
+		"zz-token-visible-non-runtime-model": "tiered_expr",
+	}, map[string]string{
+		"zz-token-visible-non-runtime-model": `tier("base", p)`,
+	})
+
+	recorder := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(recorder)
+	ctx.Request = httptest.NewRequest(http.MethodGet, "/v1/models", nil)
+	common.SetContextKey(ctx, constant.ContextKeyTokenModelLimitEnabled, true)
+	common.SetContextKey(ctx, constant.ContextKeyTokenModelLimit, map[string]bool{
+		"zz-token-image-runtime-model":       true,
+		"zz-token-visible-non-runtime-model": true,
+	})
+
+	ListModels(ctx, constant.ChannelTypeOpenAI)
+
+	ids := decodeListModelsResponse(t, recorder)
+	require.NotContains(t, ids, "zz-token-image-runtime-model")
+	require.Contains(t, ids, "zz-token-visible-non-runtime-model")
+}

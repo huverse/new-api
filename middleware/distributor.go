@@ -79,6 +79,10 @@ func Distribute() func(c *gin.Context) {
 					abortWithOpenAiMessage(c, http.StatusBadRequest, i18n.T(c, i18n.MsgDistributorModelNameRequired))
 					return
 				}
+				if !common.IsAllowedEndpointOnlyModelPath(modelRequest.Model, c.Request.URL.Path) {
+					abortWithOpenAiMessage(c, http.StatusBadRequest, fmt.Sprintf("model %s is only supported on image endpoints", modelRequest.Model), types.ErrorCodeModelNotFound)
+					return
+				}
 				var selectGroup string
 				usingGroup := common.GetContextKeyString(c, constant.ContextKeyUsingGroup)
 				// check path is /pg/chat/completions
